@@ -1,5 +1,7 @@
 # SpaceXAI usage
 
+![Agents panel showing Grok and Grok Bot remaining quota](screenshot.png)
+
 Omarchy **service** plugin. It does not add a bar icon.
 
 It writes Grok and Cursor usage records into
