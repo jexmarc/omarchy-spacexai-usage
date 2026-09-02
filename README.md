@@ -6,7 +6,8 @@
 
 Omarchy **service** plugin. It does not add a bar icon.
 
-It writes Grok and Cursor usage records into
+It writes remaining-quota records for **Cursor and Grok models** — the
+models now associated with SpaceXAI — into
 `~/.local/state/omarchy/agents/usage/` using the same JSON contract as the
 stock Claude, Codex, and Fireworks collectors. The **Agents** panel
 (`omarchy.agents`) already watches that directory, so the extra tabs appear
@@ -22,8 +23,9 @@ I could not find a plugin that also showed **Grok Bot** (grokbot / grok-bot)
 usage — remaining weekly allowance, reset time, and token totals — next to
 those. I also wanted it **in that same Agents panel**, not a separate plugin,
 panel, or bar icon, so it stays one place with the built-in collectors instead
-of a second UI. This exists for that: Grok CLI and Grok Bot on one Grok tab,
-Cursor on its own tab, written into `omarchy.agents`.
+of a second UI. This exists for that: Cursor and Grok models (the ones now
+associated with SpaceXAI) as extra tabs in `omarchy.agents` — Grok CLI and
+Grok Bot on one Grok tab, Cursor on its own tab.
 
 ## Marketplace search
 
