@@ -92,20 +92,24 @@ def remaining_record(
   tier_label: str = "",
   auth_help: str = "",
   limits: list[dict[str, Any]] | None = None,
+  stats: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-  return {
+  payload: dict[str, Any] = {
     "schemaVersion": 1,
     "id": agent_id,
     "name": name,
     "updatedAt": now_iso(),
     "ready": ready,
-    "hasLocalStats": False,
-    "hasPromptStats": False,
+    "hasLocalStats": bool(stats),
+    "hasPromptStats": bool(stats),
     "tierLabel": tier_label,
     "usageStatusText": "",
     "authHelpText": auth_help,
     "limits": limits or [],
   }
+  if stats:
+    payload.update(stats)
+  return payload
 
 
 def used_fraction(value: Any) -> float | None:
@@ -171,6 +175,155 @@ def http_json(url: str, *, method: str = "GET", headers: dict[str, str] | None =
   except json.JSONDecodeError:
     return status, {}
   return status, parsed if isinstance(parsed, dict) else {}
+
+
+CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "omarchy" / "spacexai-usage"
+CURSOR_EVENTS_CACHE_SEC = 900
+
+
+def local_date_string() -> str:
+  return datetime.now().date().isoformat()
+
+
+def recent_date_strings() -> list[str]:
+  today = datetime.now().date()
+  return [(today - timedelta(days=offset)).isoformat() for offset in range(6, -1, -1)]
+
+
+def local_date_from_timestamp(value: Any) -> str:
+  if value is None:
+    return local_date_string()
+  if isinstance(value, (int, float)):
+    try:
+      seconds = float(value) / 1000.0 if float(value) > 10_000_000_000 else float(value)
+      return datetime.fromtimestamp(seconds).date().isoformat()
+    except (OverflowError, OSError, ValueError):
+      return local_date_string()
+  raw = str(value).strip()
+  if not raw:
+    return local_date_string()
+  if raw.isdigit():
+    return local_date_from_timestamp(int(raw))
+  try:
+    parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if parsed.tzinfo is not None:
+      parsed = parsed.astimezone()
+    return parsed.date().isoformat()
+  except ValueError:
+    return raw[:10] if len(raw) >= 10 else local_date_string()
+
+
+def empty_bucket() -> dict[str, int]:
+  return {
+    "inputTokens": 0,
+    "outputTokens": 0,
+    "cacheReadInputTokens": 0,
+    "cacheCreationInputTokens": 0,
+  }
+
+
+def int_tokens(value: Any) -> int:
+  try:
+    n = float(value or 0)
+  except (TypeError, ValueError):
+    return 0
+  if n != n or n < 0:
+    return 0
+  return int(n)
+
+
+class TokenStats:
+  def __init__(self) -> None:
+    self.recent_dates = recent_date_strings()
+    self.today = local_date_string()
+    self.recent = {day: {"date": day, "messageCount": 0} for day in self.recent_dates}
+    self.sessions: set[str] = set()
+    self.today_sessions: set[str] = set()
+    self.active_days: set[str] = set()
+    self.today_tokens: dict[str, int] = {}
+    self.model_usage: dict[str, dict[str, int]] = {}
+    self.prompts = 0
+    self.today_prompts = 0
+    self.today_token_total = 0
+
+  def add(
+    self,
+    *,
+    session: str,
+    day: str,
+    model: str,
+    prompt: bool,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_read: int = 0,
+    cache_write: int = 0,
+    into_models: bool = True,
+    into_days: bool = True,
+  ) -> None:
+    model = (model or "grok").split("/")[-1] or "grok"
+    total = int_tokens(input_tokens) + int_tokens(output_tokens) + int_tokens(cache_read) + int_tokens(cache_write)
+    if into_models:
+      bucket = self.model_usage.setdefault(model, empty_bucket())
+      bucket["inputTokens"] += int_tokens(input_tokens)
+      bucket["outputTokens"] += int_tokens(output_tokens)
+      bucket["cacheReadInputTokens"] += int_tokens(cache_read)
+      bucket["cacheCreationInputTokens"] += int_tokens(cache_write)
+    if not into_days:
+      return
+    self.sessions.add(session)
+    if day:
+      self.active_days.add(day)
+    if prompt:
+      self.prompts += 1
+    if day in self.recent:
+      self.recent[day]["messageCount"] += total
+    if day == self.today:
+      if prompt:
+        self.today_prompts += 1
+        self.today_sessions.add(session)
+      self.today_token_total += total
+      if total:
+        self.today_tokens[model] = self.today_tokens.get(model, 0) + total
+
+  def merge(self, other: "TokenStats") -> None:
+    self.sessions |= other.sessions
+    self.today_sessions |= other.today_sessions
+    self.active_days |= other.active_days
+    self.prompts += other.prompts
+    self.today_prompts += other.today_prompts
+    self.today_token_total += other.today_token_total
+    for model, extra in other.today_tokens.items():
+      self.today_tokens[model] = self.today_tokens.get(model, 0) + extra
+    for day, row in other.recent.items():
+      if day in self.recent:
+        self.recent[day]["messageCount"] += int(row.get("messageCount") or 0)
+    for model, bucket in other.model_usage.items():
+      dest = self.model_usage.setdefault(model, empty_bucket())
+      for key, value in bucket.items():
+        dest[key] += int(value or 0)
+
+  def as_dict(self) -> dict[str, Any]:
+    return {
+      "todayPrompts": self.today_prompts,
+      "todaySessions": len(self.today_sessions),
+      "todayTotalTokens": self.today_token_total,
+      "todayTokensByModel": self.today_tokens,
+      "recentDays": [self.recent[day] for day in self.recent_dates],
+      "totalPrompts": self.prompts,
+      "totalSessions": len(self.sessions),
+      "activeDays": len(self.active_days),
+      "activeDates": sorted(self.active_days),
+      "modelUsage": self.model_usage,
+    }
+
+  @property
+  def has_data(self) -> bool:
+    return self.prompts > 0 or self.today_token_total > 0 or any(row["messageCount"] > 0 for row in self.recent.values())
+
+
+def is_grok_bot_model(model: str) -> bool:
+  name = (model or "").lower()
+  return name.startswith("grok-bot") or name in ("sand-default", "sand")
 
 
 def number_field(payload: dict[str, Any], *names: str) -> float | None:
@@ -470,6 +623,218 @@ def grok_headers(token: str) -> dict[str, str]:
   }
 
 
+def read_cache(name: str, max_age: float) -> Any | None:
+  path = CACHE_DIR / name
+  try:
+    if time.time() - path.stat().st_mtime > max_age:
+      return None
+    return json.loads(path.read_text(encoding="utf-8"))
+  except (OSError, json.JSONDecodeError):
+    return None
+
+
+def write_cache(name: str, payload: Any) -> None:
+  CACHE_DIR.mkdir(parents=True, exist_ok=True)
+  path = CACHE_DIR / name
+  tmp = path.with_suffix(".tmp")
+  tmp.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+  tmp.replace(path)
+  path.chmod(0o600)
+
+
+def event_tokens(event: dict[str, Any]) -> tuple[int, int, int, int]:
+  usage = event.get("tokenUsage") if isinstance(event.get("tokenUsage"), dict) else {}
+  return (
+    int_tokens(usage.get("inputTokens") or usage.get("input_tokens")),
+    int_tokens(usage.get("outputTokens") or usage.get("output_tokens")),
+    int_tokens(usage.get("cacheReadTokens") or usage.get("cache_read_tokens")),
+    int_tokens(usage.get("cacheWriteTokens") or usage.get("cache_write_tokens") or usage.get("cacheCreationTokens")),
+  )
+
+
+def cursor_usage_events(token: str) -> list[dict[str, Any]]:
+  cached = read_cache("cursor-events.json", CURSOR_EVENTS_CACHE_SEC)
+  if isinstance(cached, list):
+    return cached
+  now = datetime.now(timezone.utc)
+  start_ms = int((now - timedelta(days=7)).timestamp() * 1000)
+  end_ms = int(now.timestamp() * 1000)
+  events: list[dict[str, Any]] = []
+  page = 1
+  while page <= 8:
+    status, payload = cursor_rpc("GetFilteredUsageEvents", token, {
+      "page": page,
+      "pageSize": 1000,
+      "startDate": str(start_ms),
+      "endDate": str(end_ms),
+    })
+    if status != 200:
+      break
+    batch = payload.get("usageEventsDisplay") if isinstance(payload, dict) else None
+    if not isinstance(batch, list) or not batch:
+      break
+    for entry in batch:
+      if not isinstance(entry, dict):
+        continue
+      inp, out, cache_read, cache_write = event_tokens(entry)
+      events.append({
+        "timestamp": entry.get("timestamp"),
+        "model": str(entry.get("model") or "cursor"),
+        "inputTokens": inp,
+        "outputTokens": out,
+        "cacheReadTokens": cache_read,
+        "cacheWriteTokens": cache_write,
+      })
+    if len(batch) < 1000:
+      break
+    page += 1
+  write_cache("cursor-events.json", events)
+  return events
+
+
+def cursor_usage_aggregation(token: str) -> list[dict[str, Any]]:
+  cached = read_cache("cursor-aggregation.json", CURSOR_EVENTS_CACHE_SEC)
+  if isinstance(cached, list):
+    return cached
+  status, payload = cursor_rpc("GetAggregatedUsageEvents", token, {})
+  rows = payload.get("aggregations") if status == 200 and isinstance(payload, dict) else []
+  out: list[dict[str, Any]] = []
+  if isinstance(rows, list):
+    for row in rows:
+      if not isinstance(row, dict):
+        continue
+      out.append({
+        "model": str(row.get("modelIntent") or row.get("model") or "cursor"),
+        "inputTokens": int_tokens(row.get("inputTokens")),
+        "outputTokens": int_tokens(row.get("outputTokens")),
+        "cacheReadTokens": int_tokens(row.get("cacheReadTokens")),
+        "cacheWriteTokens": int_tokens(row.get("cacheWriteTokens")),
+      })
+  write_cache("cursor-aggregation.json", out)
+  return out
+
+
+def apply_events(stats: TokenStats, events: list[dict[str, Any]], *, bot: bool, model_override: str | None = None, into_models: bool = True) -> None:
+  for event in events:
+    model = str(event.get("model") or "")
+    if bot != is_grok_bot_model(model):
+      continue
+    stats.add(
+      session="cursor:" + (model_override or model) + ":" + local_date_from_timestamp(event.get("timestamp")),
+      day=local_date_from_timestamp(event.get("timestamp")),
+      model=model_override or model,
+      prompt=True,
+      input_tokens=int_tokens(event.get("inputTokens")),
+      output_tokens=int_tokens(event.get("outputTokens")),
+      cache_read=int_tokens(event.get("cacheReadTokens")),
+      cache_write=int_tokens(event.get("cacheWriteTokens")),
+      into_models=into_models,
+    )
+
+
+def apply_aggregation(stats: TokenStats, rows: list[dict[str, Any]], *, bot: bool, model_override: str | None = None) -> None:
+  day = local_date_string()
+  for row in rows:
+    model = str(row.get("model") or "")
+    if bot != is_grok_bot_model(model):
+      continue
+    stats.add(
+      session="agg:" + (model_override or model),
+      day=day,
+      model=model_override or model,
+      prompt=False,
+      input_tokens=int_tokens(row.get("inputTokens")),
+      output_tokens=int_tokens(row.get("outputTokens")),
+      cache_read=int_tokens(row.get("cacheReadTokens")),
+      cache_write=int_tokens(row.get("cacheWriteTokens")),
+      into_models=True,
+      into_days=False,
+    )
+
+
+def grok_session_token_total(signals: dict[str, Any]) -> int:
+  compacted = int_tokens(signals.get("totalTokensBeforeCompaction"))
+  current = int_tokens(signals.get("contextTokensUsed"))
+  return compacted + current if compacted else current
+
+
+def scan_grok_cli() -> TokenStats:
+  stats = TokenStats()
+  root = Path.home() / ".grok" / "sessions"
+  if not root.is_dir():
+    return stats
+  for summary in root.rglob("summary.json"):
+    try:
+      data = json.loads(summary.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+      continue
+    session_id = str((data.get("info") or {}).get("id") or summary.parent.name)
+    model = str(data.get("current_model_id") or "grok")
+    signals_path = summary.parent / "signals.json"
+    signals: dict[str, Any] = {}
+    if signals_path.is_file():
+      try:
+        loaded = json.loads(signals_path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+          signals = loaded
+          model = str(signals.get("primaryModelId") or model)
+      except (OSError, json.JSONDecodeError):
+        pass
+    total = grok_session_token_total(signals)
+    day_turns: dict[str, int] = {}
+    events_path = summary.parent / "events.jsonl"
+    if events_path.is_file():
+      try:
+        with events_path.open(encoding="utf-8", errors="replace") as handle:
+          for line in handle:
+            if '"turn_started"' not in line:
+              continue
+            try:
+              entry = json.loads(line)
+            except json.JSONDecodeError:
+              continue
+            if entry.get("type") != "turn_started":
+              continue
+            day = local_date_from_timestamp(entry.get("ts"))
+            day_turns[day] = day_turns.get(day, 0) + 1
+            model = str(entry.get("model_id") or model)
+      except OSError:
+        pass
+    if not day_turns:
+      day = local_date_from_timestamp(data.get("last_active_at") or data.get("updated_at") or data.get("created_at"))
+      prompts = max(1, int_tokens(signals.get("userMessageCount") or data.get("num_chat_messages") or 1))
+      day_turns[day] = prompts
+    turn_total = sum(day_turns.values()) or 1
+    for day, turns in day_turns.items():
+      share = total * turns // turn_total if total else 0
+      stats.add(
+        session=session_id,
+        day=day,
+        model=model,
+        prompt=True,
+        input_tokens=share,
+      )
+      if turns > 1:
+        stats.prompts += turns - 1
+        if day == stats.today:
+          stats.today_prompts += turns - 1
+  return stats
+
+
+def grok_token_stats(token: str | None) -> TokenStats | None:
+  stats = scan_grok_cli()
+  if token:
+    apply_events(stats, cursor_usage_events(token), bot=True, model_override="grok", into_models=True)
+  return stats if stats.has_data else None
+
+
+def cursor_token_stats(token: str) -> TokenStats | None:
+  stats = TokenStats()
+  apply_events(stats, cursor_usage_events(token), bot=False, into_models=False)
+  apply_aggregation(stats, cursor_usage_aggregation(token), bot=False)
+  return stats if stats.has_data else None
+
+
 def collect_grok() -> dict[str, Any] | None:
   if not GROK_AUTH.is_file() and not (Path.home() / ".grok").exists():
     return None
@@ -551,7 +916,7 @@ def cursor_checksum(machine_id: str, now_ms: int | None = None) -> str:
   return base64.urlsafe_b64encode(bytes(buf)).decode("ascii").rstrip("=") + machine_id
 
 
-def cursor_rpc(method: str, token: str) -> tuple[int, Any]:
+def cursor_rpc(method: str, token: str, payload: dict[str, Any] | None = None) -> tuple[int, Any]:
   machine = str(uuid.uuid4())
   headers = {
     "Content-Type": "application/json",
@@ -568,7 +933,7 @@ def cursor_rpc(method: str, token: str) -> tuple[int, Any]:
     f"{CURSOR_BACKEND}/aiserver.v1.DashboardService/{method}",
     method="POST",
     headers=headers,
-    data=b"{}",
+    data=json.dumps(payload if payload is not None else {}).encode(),
   )
 
 
@@ -728,7 +1093,15 @@ def collect_cursor() -> dict[str, Any] | None:
   tier = f"{leftover}% remaining"
   if plan_name:
     tier += f" · {plan_name}"
-  return remaining_record("cursor", "Cursor", ready=bool(limits), tier_label=tier, limits=limits)
+  stats = cursor_token_stats(token)
+  return remaining_record(
+    "cursor",
+    "Cursor",
+    ready=bool(limits) or bool(stats),
+    tier_label=tier,
+    limits=limits,
+    stats=stats.as_dict() if stats else None,
+  )
 
 
 def merge_grok_records(grok: dict[str, Any] | None, bot: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -774,7 +1147,16 @@ def merge_grok_records(grok: dict[str, Any] | None, bot: dict[str, Any] | None) 
   if plan:
     tier += f" · {plan}"
   ready = bool((grok and grok.get("ready")) or (bot and bot.get("ready")))
-  return remaining_record("grok", "Grok", ready=ready, tier_label=tier, auth_help=" ".join(helps), limits=limits)
+  stats = grok_token_stats(usable_cursor_token())
+  return remaining_record(
+    "grok",
+    "Grok",
+    ready=ready or bool(stats),
+    tier_label=tier,
+    auth_help=" ".join(helps),
+    limits=limits,
+    stats=stats.as_dict() if stats else None,
+  )
 
 
 def main() -> int:

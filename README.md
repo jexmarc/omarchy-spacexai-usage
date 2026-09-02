@@ -26,8 +26,10 @@ omarchy plugin enable spacexai-usage
 ```
 
 Each tab shows remaining quota from that product's authenticated usage stats
-(the same numbers as Settings → Usage). Local session token counts are not
-estimated.
+(the same numbers as Settings → Usage), plus the same tokens-by-day and
+tokens-by-model sections as Claude Code. Grok's token totals combine Grok CLI
+sessions with Grok Bot usage; the per-model breakdown uses Grok CLI models
+and attributes Grok Bot tokens to `grok`. Cursor uses billed usage events.
 
 ## Credentials
 
