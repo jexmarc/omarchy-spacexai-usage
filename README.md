@@ -26,26 +26,6 @@ of a second UI. This exists for that: Cursor and Grok models (the ones now
 associated with SpaceXAI) as extra tabs in `omarchy.agents` — Grok CLI and
 Grok Bot on one Grok tab, Cursor on its own tab.
 
-## Marketplace search
-
-The Omarchy plugin catalog at [plugins.omarchy.org](https://plugins.omarchy.org/)
-searches listing **name**, **description**, **id**, **author**, **category**,
-**kind**, and the **one to three official tags** from the submit form. It does
-not search this README, GitHub topics, or a free-form `grok bot` tag unless
-reviewers add that tag to the catalog.
-
-Official tags are a closed list (`ai`, `bar`, `quickshell`, …). Submit with:
-
-- **Category:** Developer Tools
-- **Tags:** `ai`, `quickshell`
-- **Suggest a missing tag:** `grok bot`
-
-The manifest `description` already contains `Grok`, `Grok Bot`, `grokbot`, and
-`grok-bot`, so catalog searches for those strings match even if the extra tag
-is not accepted.
-
-Leave Agents on the bar.
-
 Install:
 
 ```bash
