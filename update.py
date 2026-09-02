@@ -674,30 +674,6 @@ def collect_grok_bot() -> dict[str, Any] | None:
   )
 
 
-def credit_grant_used(payload: Any) -> float | None:
-  if not isinstance(payload, dict) or not payload:
-    return None
-  buckets = payload.get("creditGrants") or payload.get("grants") or payload.get("balances")
-  if isinstance(buckets, list) and buckets:
-    used_parts = [credit_grant_used(item) for item in buckets if isinstance(item, dict)]
-    used_parts = [part for part in used_parts if part is not None]
-    return max(used_parts) if used_parts else None
-  remaining = number_field(payload, "remaining", "remainingCents", "balance", "available", "creditsRemaining")
-  total = number_field(payload, "total", "granted", "limit", "original", "funded", "creditsGranted")
-  spent = number_field(payload, "used", "spent", "usedCents")
-  if remaining is not None and remaining > 100:
-    remaining = remaining / 100.0
-  if total is not None and total > 100:
-    total = total / 100.0
-  if spent is not None and spent > 100 and total is not None and total <= 1000:
-    spent = spent / 100.0
-  if remaining is not None and total and total > 0:
-    return min(1.0, max(0.0, 1.0 - remaining / total))
-  if spent is not None and total and total > 0:
-    return min(1.0, max(0.0, spent / total))
-  return None
-
-
 def collect_cursor() -> dict[str, Any] | None:
   token = usable_cursor_token()
   cursor_present = any(
@@ -711,7 +687,6 @@ def collect_cursor() -> dict[str, Any] | None:
 
   usage_status, usage = cursor_rpc("GetCurrentPeriodUsage", token)
   plan_status, plan_info = cursor_rpc("GetPlanInfo", token)
-  grants_status, grants = cursor_rpc("GetCreditGrantsBalance", token)
   if usage_status == -1:
     return remaining_record("cursor", "Cursor", ready=False, auth_help="Could not reach Cursor usage stats.")
   if usage_status != 200:
@@ -744,9 +719,6 @@ def collect_cursor() -> dict[str, Any] | None:
   elif on_demand_remaining is not None:
     limits.append(limit_entry("On Demand", 0.0, resets, "On Demand"))
 
-  extra_used = credit_grant_used(grants) if grants_status == 200 else None
-  limits.append(limit_entry("Extra usage credits", extra_used if extra_used is not None else 0.0, resets, "Extra usage credits"))
-
   included = [entry["percent"] for entry in limits if entry["title"] in ("Cursor Models", "Other Models")]
   leftover = remaining_pct(max(included) if included else 0.0)
   plan_name = ""
@@ -770,8 +742,6 @@ def merge_grok_records(grok: dict[str, Any] | None, bot: dict[str, Any] | None) 
       if not isinstance(entry, dict):
         continue
       title = str(entry.get("title") or entry.get("label") or "")
-      if title == "Extra usage credits":
-        continue
       limits.append(entry)
       if title == "Grok":
         used_parts.append(float(entry.get("percent") or 0))
@@ -790,8 +760,6 @@ def merge_grok_records(grok: dict[str, Any] | None, bot: dict[str, Any] | None) 
     help_text = str(bot.get("authHelpText") or "").strip()
     if help_text:
       helps.append(help_text)
-  extra_resets = str(limits[0].get("resetsAt") or "") if limits else ""
-  limits.append(limit_entry("Extra usage credits", 0.0, extra_resets, "Extra usage credits"))
   leftover = remaining_pct(max(used_parts) if used_parts else 0.0)
   plan = ""
   for record in (grok, bot):

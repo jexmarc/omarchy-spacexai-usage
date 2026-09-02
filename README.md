@@ -9,7 +9,7 @@ stock Claude, Codex, and Fireworks collectors. The **Agents** panel
 beside those subscriptions.
 
 - **Grok** — SuperGrok weekly pool and Grok Bot weekly allowance
-- **Cursor** — Cursor Models, Other Models, On Demand, Extra usage credits
+- **Cursor** — Cursor Models, Other Models, On Demand
 
 Leave Agents on the bar. Install with:
 
