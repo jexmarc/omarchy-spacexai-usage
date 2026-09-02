@@ -20,8 +20,10 @@ beside those subscriptions.
 Omarchy's stock Agents panel already covers Claude, Codex, and Fireworks.
 I could not find a plugin that also showed **Grok Bot** (grokbot / grok-bot)
 usage — remaining weekly allowance, reset time, and token totals — next to
-those. I needed that on my bar, so this exists: Grok CLI and Grok Bot on one
-Grok tab, Cursor on its own tab, in the same panel as the built-in collectors.
+those. I also wanted it **in that same Agents panel**, not a separate plugin,
+panel, or bar icon, so it stays one place with the built-in collectors instead
+of a second UI. This exists for that: Grok CLI and Grok Bot on one Grok tab,
+Cursor on its own tab, written into `omarchy.agents`.
 
 ## Marketplace search
 
