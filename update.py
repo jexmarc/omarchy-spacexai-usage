@@ -55,7 +55,7 @@ def now_iso() -> str:
 
 
 def warn(message: str) -> None:
-  print(f"spacexai-usage: {message}", file=sys.stderr)
+  print(f"omarchy-spacexai-usage: {message}", file=sys.stderr)
 
 
 def write_record(agent_id: str, record: dict[str, Any]) -> None:
@@ -177,7 +177,7 @@ def http_json(url: str, *, method: str = "GET", headers: dict[str, str] | None =
   return status, parsed if isinstance(parsed, dict) else {}
 
 
-CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "omarchy" / "spacexai-usage"
+CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "omarchy" / "omarchy-spacexai-usage"
 CURSOR_EVENTS_CACHE_SEC = 900
 
 

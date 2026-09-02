@@ -1,4 +1,4 @@
-# SpaceXAI usage
+# omarchy-spacexai-usage
 
 <table>
 <tr>
@@ -33,20 +33,20 @@ Grok Bot on one Grok tab, Cursor on its own tab.
 Install:
 
 ```bash
-omarchy plugin add https://github.com/jexmarc/spacexai-usage.git --enable
+omarchy plugin add https://github.com/jexmarc/omarchy-spacexai-usage.git --enable
 ```
 
 Or from a local checkout:
 
 ```bash
-omarchy plugin enable spacexai-usage
+omarchy plugin enable omarchy-spacexai-usage
 ```
 
 Remove:
 
 ```bash
-omarchy plugin disable spacexai-usage
-omarchy plugin remove spacexai-usage --yes
+omarchy plugin disable omarchy-spacexai-usage
+omarchy plugin remove omarchy-spacexai-usage --yes
 ```
 
 Enabling this plugin does not change bar layout or overwrite `shell.json`

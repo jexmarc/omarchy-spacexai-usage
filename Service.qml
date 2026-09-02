@@ -37,7 +37,7 @@ Item {
     }
     stderr: StdioCollector {
       waitForEnd: true
-      onStreamFinished: if (text.trim() !== "") console.warn("spacexai-usage", text.trim())
+      onStreamFinished: if (text.trim() !== "") console.warn("omarchy-spacexai-usage", text.trim())
     }
   }
 
