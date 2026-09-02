@@ -1,8 +1,8 @@
 # SpaceXAI usage
 
-![Grok tab in the Agents panel](grok.png)
+![Grok tab in the Agents panel, with the Grok orbital mark](grok.png)
 
-![Cursor tab in the Agents panel](cursor.png)
+![Cursor tab in the Agents panel, with the Cursor cube mark](cursor.png)
 
 Omarchy **service** plugin. It does not add a bar icon.
 
