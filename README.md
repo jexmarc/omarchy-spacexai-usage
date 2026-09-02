@@ -15,7 +15,9 @@ beside those subscriptions.
 - **Grok** — SuperGrok weekly pool and Grok Bot weekly allowance
 - **Cursor** — Cursor Models, Other Models, On Demand
 
-Leave Agents on the bar. Install with:
+Leave Agents on the bar.
+
+Install:
 
 ```bash
 omarchy plugin add https://github.com/jexmarc/spacexai-usage.git --enable
@@ -26,6 +28,17 @@ Or from a local checkout:
 ```bash
 omarchy plugin enable spacexai-usage
 ```
+
+Remove:
+
+```bash
+omarchy plugin disable spacexai-usage
+omarchy plugin remove spacexai-usage --yes
+```
+
+Enabling this plugin does not change bar layout or overwrite `shell.json`
+beyond adding the plugin to the enabled list. Disabling and removing it
+stops the collector; it does not delete Claude/Codex/Fireworks usage files.
 
 Each tab shows remaining quota from that product's authenticated usage stats
 (the same numbers as Settings → Usage), plus the same tokens-by-day and
@@ -48,4 +61,5 @@ to the product's own usage API:
 | Grok Bot / Cursor | Grok Bot `sand-secrets.json` or `~/.cursor/auth.json` | `api2.cursor.sh` |
 
 Tokens are never written into the Agents usage JSON, never printed, and never
-sent anywhere else. Usage files are created mode `0600`.
+sent anywhere else. Usage files are created mode `0600`. Preview screenshots
+in this README are UI captures with no account name, email, or path.
