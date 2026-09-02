@@ -824,7 +824,7 @@ def scan_grok_cli() -> TokenStats:
 def grok_token_stats(token: str | None) -> TokenStats | None:
   stats = scan_grok_cli()
   if token:
-    apply_events(stats, cursor_usage_events(token), bot=True, model_override="grok", into_models=True)
+    apply_events(stats, cursor_usage_events(token), bot=True, model_override="grok-bot", into_models=True)
   return stats if stats.has_data else None
 
 

@@ -31,7 +31,7 @@ Each tab shows remaining quota from that product's authenticated usage stats
 (the same numbers as Settings → Usage), plus the same tokens-by-day and
 tokens-by-model sections as Claude Code. Grok's token totals combine Grok CLI
 sessions with Grok Bot usage; the per-model breakdown uses Grok CLI models
-and attributes Grok Bot tokens to `grok`. Cursor uses billed usage events.
+and attributes Grok Bot tokens to Grok Bot. Cursor uses billed usage events.
 
 ## Credentials
 
