@@ -15,6 +15,14 @@ beside those subscriptions.
 - **Grok** — SuperGrok weekly pool and Grok Bot weekly allowance
 - **Cursor** — Cursor Models, Other Models, On Demand
 
+## Why
+
+Omarchy's stock Agents panel already covers Claude, Codex, and Fireworks.
+I could not find a plugin that also showed **Grok Bot** usage — remaining
+weekly allowance, reset time, and token totals — next to those. I needed
+that on my bar, so this exists: Grok CLI and Grok Bot on one Grok tab,
+Cursor on its own tab, in the same panel as the built-in collectors.
+
 Leave Agents on the bar.
 
 Install:
