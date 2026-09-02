@@ -2,8 +2,8 @@
 
 <table>
 <tr>
-<td valign="top"><img src="grok.png" alt="Grok tab in the Agents panel, with the Grok orbital mark" width="280"></td>
-<td valign="top"><img src="cursor.png" alt="Cursor tab in the Agents panel, with the Cursor cube mark" width="280"></td>
+<td valign="top"><img src="grok.png" alt="Grok tab in the Agents panel, with the Grok orbital mark" width="322"></td>
+<td valign="top"><img src="cursor.png" alt="Cursor tab in the Agents panel, with the Cursor cube mark" width="322"></td>
 </tr>
 </table>
 
