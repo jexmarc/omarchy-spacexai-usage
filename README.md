@@ -1,6 +1,8 @@
 # SpaceXAI usage
 
-![Agents panel showing Grok and Grok Bot remaining quota](screenshot.png)
+![Grok tab in the Agents panel](grok.png)
+
+![Cursor tab in the Agents panel](cursor.png)
 
 Omarchy **service** plugin. It does not add a bar icon.
 
