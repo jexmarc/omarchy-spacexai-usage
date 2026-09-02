@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "spacexai-usage",
+  "name": "SpaceXAI usage",
+  "version": "1.0.0",
+  "author": "jexmarc",
+  "license": "MIT",
+  "description": "Adds Grok and Cursor remaining-quota tabs to the existing Omarchy Agents panel. No extra bar icon.",
+  "kinds": ["service"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}

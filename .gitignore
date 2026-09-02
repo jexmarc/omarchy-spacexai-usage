@@ -1,0 +1,37 @@
+# Local python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Never track credentials, tokens, keys, or usage dumps
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+auth.json
+**/auth.json
+sand-secrets.json
+**/sand-secrets.json
+secrets.json
+**/secrets.json
+credentials.json
+**/credentials.json
+*.token
+*.jwt
+*.secret
+
+# Local Omarchy usage output (live quota files, not source)
+usage/
+*.json.tmp
