@@ -18,10 +18,28 @@ beside those subscriptions.
 ## Why
 
 Omarchy's stock Agents panel already covers Claude, Codex, and Fireworks.
-I could not find a plugin that also showed **Grok Bot** usage — remaining
-weekly allowance, reset time, and token totals — next to those. I needed
-that on my bar, so this exists: Grok CLI and Grok Bot on one Grok tab,
-Cursor on its own tab, in the same panel as the built-in collectors.
+I could not find a plugin that also showed **Grok Bot** (grokbot / grok-bot)
+usage — remaining weekly allowance, reset time, and token totals — next to
+those. I needed that on my bar, so this exists: Grok CLI and Grok Bot on one
+Grok tab, Cursor on its own tab, in the same panel as the built-in collectors.
+
+## Marketplace search
+
+The Omarchy plugin catalog at [plugins.omarchy.org](https://plugins.omarchy.org/)
+searches listing **name**, **description**, **id**, **author**, **category**,
+**kind**, and the **one to three official tags** from the submit form. It does
+not search this README, GitHub topics, or a free-form `grok bot` tag unless
+reviewers add that tag to the catalog.
+
+Official tags are a closed list (`ai`, `bar`, `quickshell`, …). Submit with:
+
+- **Category:** Developer Tools
+- **Tags:** `ai`, `quickshell`
+- **Suggest a missing tag:** `grok bot`
+
+The manifest `description` already contains `Grok`, `Grok Bot`, `grokbot`, and
+`grok-bot`, so catalog searches for those strings match even if the extra tag
+is not accepted.
 
 Leave Agents on the bar.
 

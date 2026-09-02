@@ -2,10 +2,19 @@
   "schemaVersion": 1,
   "id": "spacexai-usage",
   "name": "SpaceXAI usage",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "jexmarc",
   "license": "MIT",
-  "description": "Adds Grok and Cursor remaining-quota tabs to the existing Omarchy Agents panel. No extra bar icon.",
+  "description": "Adds Grok, Grok Bot (grokbot, grok-bot), and Cursor remaining-quota tabs to the existing Omarchy Agents panel. No extra bar icon.",
+  "keywords": [
+    "grok",
+    "grok bot",
+    "grokbot",
+    "grok-bot",
+    "cursor",
+    "agents",
+    "usage"
+  ],
   "kinds": ["service"],
   "keepLoaded": true,
   "entryPoints": {
