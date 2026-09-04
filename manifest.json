@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omarchy-spacexai-usage",
   "name": "omarchy-spacexai-usage",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "jexmarc",
   "license": "MIT",
   "description": "Adds Grok, Grok Bot (grokbot, grok-bot), and Cursor remaining-quota tabs to the existing Omarchy Agents panel. No extra bar icon.",

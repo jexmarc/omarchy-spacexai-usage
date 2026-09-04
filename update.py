@@ -157,16 +157,60 @@ def iso_from_any(value: Any) -> str:
     return raw
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+  """Fail closed on 3xx so Authorization and refresh bodies never leave the original host."""
+
+  def http_error_302(self, req, fp, code, msg, headers):
+    raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
+
+  http_error_301 = http_error_302
+  http_error_303 = http_error_302
+  http_error_307 = http_error_302
+  http_error_308 = http_error_302
+
+
+_HTTP = urllib.request.build_opener(_NoRedirectHandler)
+
+
+def _https_host(url: str) -> str:
+  parts = urllib.parse.urlsplit(url)
+  if parts.scheme.lower() != "https" or not parts.hostname or parts.username or parts.password:
+    raise ValueError("usage endpoints must be https without userinfo")
+  return parts.hostname.lower()
+
+
+_ALLOWED_HOSTS = frozenset({
+  _https_host(GROK_BILLING),
+  _https_host(GROK_USER),
+  _https_host(GROK_SETTINGS),
+  _https_host(GROK_OIDC_TOKEN),
+  _https_host(CURSOR_BACKEND),
+})
+
+
+def _allowed_request_url(url: str) -> bool:
+  parts = urllib.parse.urlsplit(url)
+  if parts.scheme.lower() != "https" or parts.username or parts.password:
+    return False
+  host = (parts.hostname or "").lower()
+  return host in _ALLOWED_HOSTS
+
+
 def http_json(url: str, *, method: str = "GET", headers: dict[str, str] | None = None, data: bytes | None = None, timeout: int = 15) -> tuple[int, Any]:
+  if not _allowed_request_url(url):
+    return -1, {}
   req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
   try:
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with _HTTP.open(req, timeout=timeout) as resp:
       body = resp.read()
       status = int(resp.status)
   except urllib.error.HTTPError as exc:
-    body = exc.read()
+    try:
+      body = exc.read()
+    except Exception:
+      body = b""
     status = int(exc.code)
-  except (urllib.error.URLError, TimeoutError, OSError):
+  except (urllib.error.URLError, TimeoutError, OSError, ValueError):
     return -1, {}
   if not body:
     return status, {}

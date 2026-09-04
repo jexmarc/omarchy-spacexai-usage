@@ -74,5 +74,8 @@ to the product's own usage API:
 | Grok Bot / Cursor | Grok Bot `sand-secrets.json` or `~/.cursor/auth.json` | `api2.cursor.sh` |
 
 Tokens are never written into the Agents usage JSON, never printed, and never
-sent anywhere else. Usage files are created mode `0600`. Preview screenshots
-in this README are UI captures with no account name, email, or path.
+sent anywhere else. Authenticated requests are HTTPS-only to those hosts and
+do not follow redirects, so a `Location` header cannot forward the bearer
+token or a refresh-token body to another origin. Usage files are created
+mode `0600`. Preview screenshots in this README are UI captures with no
+account name, email, or path.
