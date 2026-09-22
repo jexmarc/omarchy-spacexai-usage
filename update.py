@@ -196,19 +196,77 @@ def _allowed_request_url(url: str) -> bool:
   return host in _ALLOWED_HOSTS
 
 
+# One page of Cursor usage events is the largest legitimate body. Stay above
+# that and refuse anything a broken allowlisted host could stream into RAM.
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+
+
+class _ResponseTooLarge(Exception):
+  pass
+
+
+def _content_length_exceeds(headers: Any, limit: int) -> bool:
+  """True when Content-Length advertises more bytes than `limit`.
+
+  Non-numeric lengths are not trusted as a size; the read cap still applies.
+  A long digit string counts as oversized and is not turned into an int.
+  """
+  if headers is None:
+    return False
+  try:
+    raw = headers.get("Content-Length")
+  except Exception:
+    return False
+  if raw is None:
+    return False
+  parts = raw if isinstance(raw, (list, tuple)) else str(raw).split(",")
+  for part in parts:
+    token = str(part).strip()
+    if not token or not token.isdigit():
+      continue
+    if len(token) > 16 or int(token) > limit:
+      return True
+  return False
+
+
+def _read_bounded(resp: Any, limit: int = MAX_RESPONSE_BYTES) -> bytes:
+  """Return the body, or raise before buffering more than `limit` bytes.
+
+  An advertised Content-Length above the cap is rejected with no read.
+  Otherwise at most limit + 1 bytes are read, and that extra byte is a failure
+  rather than a truncated document to parse.
+  """
+  if _content_length_exceeds(getattr(resp, "headers", None), limit):
+    raise _ResponseTooLarge()
+  body = resp.read(limit + 1)
+  if not body:
+    return b""
+  if not isinstance(body, (bytes, bytearray)):
+    body = bytes(body)
+  if len(body) > limit:
+    raise _ResponseTooLarge()
+  return bytes(body)
+
+
 def http_json(url: str, *, method: str = "GET", headers: dict[str, str] | None = None, data: bytes | None = None, timeout: int = 15) -> tuple[int, Any]:
   if not _allowed_request_url(url):
     return -1, {}
   req = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
   try:
     with _HTTP.open(req, timeout=timeout) as resp:
-      body = resp.read()
+      body = _read_bounded(resp)
       status = int(resp.status)
+  except _ResponseTooLarge:
+    return -1, {}
   except urllib.error.HTTPError as exc:
     try:
-      body = exc.read()
+      body = _read_bounded(exc)
+    except _ResponseTooLarge:
+      return -1, {}
     except Exception:
       body = b""
+    finally:
+      exc.close()
     status = int(exc.code)
   except (urllib.error.URLError, TimeoutError, OSError, ValueError):
     return -1, {}
@@ -491,7 +549,7 @@ def aes128_cbc_decrypt(key: bytes, data: bytes, iv: bytes) -> bytes | None:
     return None
   pad = out[-1]
   if pad < 1 or pad > 16 or out[-pad:] != bytes([pad]) * pad:
-    return bytes(out)
+    return None
   return bytes(out[:-pad])
 
 
@@ -603,8 +661,43 @@ def grok_expires_at(entry: dict[str, Any], token: str) -> datetime | None:
     return None
 
 
+# OAuth tokens are short strings. A hostile token response must not replace
+# the saved Grok login with a document-sized or non-string value.
+MAX_TOKEN_CHARS = 16 * 1024
+
+
+def _credential_token(value: Any) -> str | None:
+  if not isinstance(value, str):
+    return None
+  if not value or len(value) > MAX_TOKEN_CHARS:
+    return None
+  if any(ch in value for ch in ("\r", "\n", "\x00")):
+    return None
+  return value
+
+
+def _replace_json(path: Path, payload: Any) -> None:
+  """Replace path with JSON. A crash leaves the previous file intact."""
+  fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+  try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+      json.dump(payload, handle, indent=2)
+      handle.write("\n")
+      handle.flush()
+      os.fsync(handle.fileno())
+    os.chmod(tmp_name, 0o600)
+    os.replace(tmp_name, path)
+  except Exception:
+    try:
+      os.unlink(tmp_name)
+    except OSError:
+      pass
+    raise
+  path.chmod(0o600)
+
+
 def grok_refresh(slot: str, entry: dict[str, Any]) -> dict[str, Any] | None:
-  refresh_token = str(entry.get("refresh_token") or "")
+  refresh_token = _credential_token(entry.get("refresh_token"))
   client_id = str(entry.get("oidc_client_id") or "")
   if not refresh_token or not client_id:
     return None
@@ -619,16 +712,20 @@ def grok_refresh(slot: str, entry: dict[str, Any]) -> dict[str, Any] | None:
     headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
     data=body,
   )
-  if status != 200 or not payload.get("access_token"):
+  access = _credential_token(payload.get("access_token"))
+  if status != 200 or access is None:
     return None
   updated = dict(entry)
-  updated["key"] = payload["access_token"]
+  updated["key"] = access
   if payload.get("refresh_token"):
-    updated["refresh_token"] = payload["refresh_token"]
+    rotated = _credential_token(payload.get("refresh_token"))
+    if rotated is None:
+      return None
+    updated["refresh_token"] = rotated
   expires_in = payload.get("expires_in")
   try:
     updated["expires_at"] = (now_utc() + timedelta(seconds=int(expires_in))).isoformat()
-  except (TypeError, ValueError):
+  except (TypeError, ValueError, OverflowError):
     updated["expires_at"] = (now_utc() + timedelta(hours=1)).isoformat()
   try:
     with GROK_AUTH.open("r+", encoding="utf-8") as handle:
@@ -636,11 +733,8 @@ def grok_refresh(slot: str, entry: dict[str, Any]) -> dict[str, Any] | None:
       data = json.load(handle)
       if isinstance(data, dict):
         data[slot] = updated
-        handle.seek(0)
-        handle.truncate()
-        json.dump(data, handle, indent=2)
-        handle.write("\n")
-  except OSError:
+        _replace_json(GROK_AUTH, data)
+  except (OSError, json.JSONDecodeError):
     pass
   return updated
 
@@ -705,6 +799,7 @@ def cursor_usage_events(token: str) -> list[dict[str, Any]]:
   end_ms = int(now.timestamp() * 1000)
   events: list[dict[str, Any]] = []
   page = 1
+  complete = False
   while page <= 8:
     status, payload = cursor_rpc("GetFilteredUsageEvents", token, {
       "page": page,
@@ -712,10 +807,13 @@ def cursor_usage_events(token: str) -> list[dict[str, Any]]:
       "startDate": str(start_ms),
       "endDate": str(end_ms),
     })
-    if status != 200:
+    if status != 200 or not isinstance(payload, dict):
       break
-    batch = payload.get("usageEventsDisplay") if isinstance(payload, dict) else None
-    if not isinstance(batch, list) or not batch:
+    batch = payload.get("usageEventsDisplay")
+    if not isinstance(batch, list):
+      break
+    if not batch:
+      complete = True
       break
     for entry in batch:
       if not isinstance(entry, dict):
@@ -730,9 +828,13 @@ def cursor_usage_events(token: str) -> list[dict[str, Any]]:
         "cacheWriteTokens": cache_write,
       })
     if len(batch) < 1000:
+      complete = True
       break
     page += 1
-  write_cache("cursor-events.json", events)
+  else:
+    complete = True
+  if complete:
+    write_cache("cursor-events.json", events)
   return events
 
 
@@ -741,7 +843,9 @@ def cursor_usage_aggregation(token: str) -> list[dict[str, Any]]:
   if isinstance(cached, list):
     return cached
   status, payload = cursor_rpc("GetAggregatedUsageEvents", token, {})
-  rows = payload.get("aggregations") if status == 200 and isinstance(payload, dict) else []
+  if status != 200 or not isinstance(payload, dict):
+    return []
+  rows = payload.get("aggregations")
   out: list[dict[str, Any]] = []
   if isinstance(rows, list):
     for row in rows:
@@ -995,8 +1099,7 @@ def cursor_refresh(refresh_token: str) -> str | None:
   )
   if status != 200:
     return None
-  access = payload.get("access_token") or payload.get("accessToken")
-  return str(access) if access else None
+  return _credential_token(payload.get("access_token") or payload.get("accessToken"))
 
 
 def grok_bot_tokens() -> tuple[str | None, str | None]:
