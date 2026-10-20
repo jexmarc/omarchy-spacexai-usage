@@ -29,6 +29,9 @@ from typing import Any
 USAGE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "omarchy" / "agents" / "usage"
 GROK_AUTH = Path(os.environ.get("GROK_HOME", Path.home() / ".grok")) / "auth.json"
 GROK_BOT_SECRETS = Path.home() / ".config" / "Grok Bot" / "sand-secrets.json"
+# Pi writes one JSONL file per session. Assistant turns carry token usage.
+# This scan is local. It does not send session text anywhere.
+PI_AGENT_DIR = Path(os.environ.get("PI_CODING_AGENT_DIR") or (Path.home() / ".pi" / "agent"))
 GROK_BILLING = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
 GROK_USER = "https://cli-chat-proxy.grok.com/v1/user?include=subscription"
 GROK_SETTINGS = "https://cli-chat-proxy.grok.com/v1/settings"
@@ -969,8 +972,57 @@ def scan_grok_cli() -> TokenStats:
   return stats
 
 
+def scan_pi_sessions() -> TokenStats:
+  """Count xAI turns in Pi's local session logs.
+
+  Only assistant messages with provider "xai" count. Codex and other Pi
+  providers in the same directory are left out. Reasoning tokens are already
+  inside output, so they are not added again.
+  """
+  stats = TokenStats()
+  root = PI_AGENT_DIR / "sessions"
+  if not root.is_dir():
+    return stats
+  for path in root.rglob("*.jsonl"):
+    session = path.stem
+    try:
+      handle = path.open(encoding="utf-8", errors="replace")
+    except OSError:
+      continue
+    with handle:
+      for line in handle:
+        if '"provider":"xai"' not in line and '"provider": "xai"' not in line:
+          continue
+        if '"usage"' not in line:
+          continue
+        try:
+          entry = json.loads(line)
+        except json.JSONDecodeError:
+          continue
+        message = entry.get("message")
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+          continue
+        if message.get("provider") != "xai":
+          continue
+        usage = message.get("usage")
+        if not isinstance(usage, dict):
+          continue
+        stats.add(
+          session=session,
+          day=local_date_from_timestamp(entry.get("timestamp")),
+          model=str(message.get("model") or "grok"),
+          prompt=True,
+          input_tokens=int_tokens(usage.get("input")),
+          output_tokens=int_tokens(usage.get("output")),
+          cache_read=int_tokens(usage.get("cacheRead")),
+          cache_write=int_tokens(usage.get("cacheWrite")),
+        )
+  return stats
+
+
 def grok_token_stats(token: str | None) -> TokenStats | None:
   stats = scan_grok_cli()
+  stats.merge(scan_pi_sessions())
   if token:
     apply_events(stats, cursor_usage_events(token), bot=True, model_override="grok-bot", into_models=True)
   return stats if stats.has_data else None

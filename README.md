@@ -56,8 +56,10 @@ stops the collector; it does not delete Claude/Codex/Fireworks usage files.
 Each tab shows remaining quota from that product's authenticated usage stats
 (the same numbers as Settings → Usage), plus the same tokens-by-day and
 tokens-by-model sections as Claude Code. Grok's token totals combine Grok CLI
-sessions with Grok Bot usage; the per-model breakdown uses Grok CLI models
-and attributes Grok Bot tokens to Grok Bot. Cursor uses billed usage events.
+sessions, Pi sessions whose provider is xai, and Grok Bot usage. This does not
+change the weekly allowance. Pi spends the xAI API key, not the Grok Bot
+included pool. The per-model breakdown uses Grok CLI models and attributes
+Grok Bot tokens to Grok Bot. Cursor uses billed usage events.
 
 ## Credentials
 
